@@ -1,0 +1,14 @@
+import os
+
+
+def testDir(directory, description=''):
+    for filename in os.listdir(directory):
+        name, ext = os.path.splitext(filename)
+        if ext in ['.py', '.test'] and name[0] not in '.#':
+            t = Test('pep8 {0}'.format(os.path.join(directory, filename)),
+                     desc=description)
+            t.post += Not(StdOutContains(filename))
+
+testDir('$testdir/../lib/', 'Main files format')
+testDir('$testdir/', 'Test files format')
+testDir('$testdir/database', 'Test Database files format')

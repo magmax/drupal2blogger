@@ -1,0 +1,32 @@
+# -*- coding:utf-8; tab-width:4; mode:python -*-
+
+import sys
+import unittest2
+import pyDoubles
+
+
+sys.path.insert(0, '$testdir/../../lib')
+import d2b
+
+
+class TestDatabaseConnection(unittest2.TestCase):
+    def setUp(self):
+        self.db = d2b.Database(":memory:")
+
+    def tearDown(self):
+        pass
+
+    def test_object_creation(self):
+        self.assertTrue(self.db)
+
+    def test_given_a_filename_it_tries_to_open_it(self):
+        self.assertRaises(IOError, self.db.load, 'not_exists.sql')
+
+    def test_if_the_file_exists_load_it(self):
+        self.db.load('$testdir/example001.sql')
+
+
+if __name__ == '__main__':
+    unittest.main()
+else:
+    UnitTestCase()

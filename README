@@ -1,0 +1,7 @@
+Proyecto para portar directamente sites Drupal a Blogger.
+
+En principio, espero soportar lo más básico (html con saltos de línea
+automáticos). Posiblemente después me plantee gestionar algún otro
+formato.
+
+El programa está hecho en python, con pruebas con Atheist.

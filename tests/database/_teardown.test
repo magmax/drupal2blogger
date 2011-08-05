@@ -1,0 +1,11 @@
+from ConfigParser import SafeConfigParser
+
+cp = SafeConfigParser()
+cp.read('$testdir/database.ini')
+
+data = []
+data.append(cp.get('db', 'user'))
+data.append(cp.get('db', 'password'))
+data.append(cp.get('db', 'database'))
+
+Command('mysqladmin -u {0} -p{1} drop {2} -f'.format(*data))
