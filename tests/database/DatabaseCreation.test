@@ -1,32 +1,50 @@
 # -*- coding:utf-8; tab-width:4; mode:python -*-
 
-import sys
-import unittest2
-import pyDoubles
+# Drupal2Blogger
+#
+# Copyright (C) 2011 Miguel Angel Garcia <miguelangel.garcia@gmail.com>
+#
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+
+from ConfigParser import SafeConfigParser
 
 
-sys.path.insert(0, '$testdir/../../lib')
-import d2b
+EXEC = "$testdir/../../lib/d2b.py"
+cp = SafeConfigParser()
+cp.read('$testdir/database.ini')
+USER = cp.get('db', 'user')
+PASS = cp.get('db', 'password')
+DDBB = cp.get('db', 'database')
 
+desc = 'Con la opción --no-blogger no envía los mensajes a blogger.'
+t = Test('{0} --no-blogger'.format(EXEC))
+t.desc = desc
 
-class TestDatabaseConnection(unittest2.TestCase):
-    def setUp(self):
-        self.db = d2b.Database(":memory:")
+desc = 'Con la opción --no-blogger y --file/-f falla si el archivo no existe.'
+t = Test('{0} --no-blogger --file {1}'.format(EXEC, 'fichero.error'))
+t.desc = desc
+t.expected = 2
+t.post += StdErrContains('The file do not exists')
 
-    def tearDown(self):
-        pass
+desc = 'Con la opción -v/--verbose muestra información por la salida de error.'
+t = Test('{0} --no-blogger -v'.format(EXEC), save_stderr=True)
+t.desc = desc
+t.post += StdErrContains('Verbose mode is ON.')
 
-    def test_object_creation(self):
-        self.assertTrue(self.db)
-
-    def test_given_a_filename_it_tries_to_open_it(self):
-        self.assertRaises(IOError, self.db.load, 'not_exists.sql')
-
-    def test_if_the_file_exists_load_it(self):
-        self.db.load('$testdir/example001.sql')
-
-
-if __name__ == '__main__':
-    unittest.main()
-else:
-    UnitTestCase()
+desc = 'Se establecen los datos de conexión.'
+t = Test('{0} --no-blogger -u {1} -p {2} -d {3}'.format(
+        EXEC, USER, PASS, DDBB))
+t.desc = desc
