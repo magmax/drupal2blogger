@@ -53,4 +53,8 @@ t.desc = desc
 desc = 'Se comprueba que se han obtenido los archivos.'
 t = Test('{0} --no-blogger -u {1} -p {2} -d {3} --save-to-file -f {4}'.format(
         EXEC, USER, PASS, DDBB, '$testdir/example001.sql'))
+t.gen += 'd2b_post_1.txt'
+t.gen += 'd2b_post_2.txt'
 t.desc = desc
+t.post += FileContains('Probando', '$testdir/../../d2b_post_1.txt')
+t.post += FileContains('Probando2', '$testdir/../../d2b_post_2.txt')

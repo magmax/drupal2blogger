@@ -41,7 +41,6 @@ class D2B(object):
     def __init__(self, options):
         self.options = options
         self.db = None
-        self.blogs = []
 
     def __del__(self):
         if self.db:
@@ -55,18 +54,16 @@ class D2B(object):
         self.__connect_to_database()
         self.__load_file()
         self.__get_blogs()
-        self.__write_to_hd()
 
         return 0
 
-    def __write_to_hd(self):
+    def __write_to_hd(self, blog):
         if not self.options.save_to_file:
             return
 
-        for item in self.blogs:
-            fd = open("d2b_post_{0}.txt".format(item.nid), 'w+')
-            fd.write(str(item))
-            fd.close()
+        fd = open("d2b_post_{0}.txt".format(blog.nid), 'w+')
+        fd.write(str(blog))
+        fd.close()
 
     def __get_blogs(self):
         if not self.db:
@@ -80,7 +77,7 @@ class D2B(object):
             blog.nid = item[0]
             blog.title = item[1]
             blog.body = item[2]
-            self.blogs.append(blog)
+            self.__write_to_hd(blog)
         cursor.close()
         self.db.commit()
 
