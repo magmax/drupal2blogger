@@ -46,5 +46,11 @@ t.post += StdErrContains('Verbose mode is ON.')
 
 desc = 'Se establecen los datos de conexión.'
 t = Test('{0} --no-blogger -u {1} -p {2} -d {3}'.format(
-        EXEC, USER, PASS, DDBB))
+        EXEC, USER, PASS, DDBB),
+         expected=1)
+t.desc = desc
+
+desc = 'Se comprueba que se han obtenido los archivos.'
+t = Test('{0} --no-blogger -u {1} -p {2} -d {3} --save-to-file -f {4}'.format(
+        EXEC, USER, PASS, DDBB, '$testdir/example001.sql'))
 t.desc = desc
