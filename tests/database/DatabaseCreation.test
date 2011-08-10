@@ -58,3 +58,7 @@ t.gen += 'd2b_post_2.txt'
 t.desc = desc
 t.post += FileContains('Probando', '$testdir/../../d2b_post_1.txt')
 t.post += FileContains('Probando2', '$testdir/../../d2b_post_2.txt')
+t.post += FileContains('Esto es un ejemplo de comentario',
+                       '$testdir/../../d2b_post_1.txt')
+t.post += FileContains('Esto es otro ejemplo de comentario',
+                       '$testdir/../../d2b_post_2.txt')

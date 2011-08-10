@@ -65,9 +65,15 @@ class Blog(object):
         self.title = ''
         self.body = ''
         self.nid = 0
+        self.comments = []
 
     def __str__(self):
-        return self.title + '\n\n' + self.body
+        result = self.title + '\n\n'
+        result += self.body + '\n\n'
+        result += 'COMMENTS' + '\n\n'
+        for each in self.comments:
+            result += each + '\n\n'
+        return result
 
 
 class D2B(object):
@@ -110,9 +116,21 @@ class D2B(object):
             blog.nid = item[0]
             blog.title = item[1]
             blog.body = item[2]
+            blog.comments = self.__get_comments(blog.nid)
             self.__write_to_hd(blog)
         cursor.close()
         self.db.commit()
+
+    def __get_comments(self, nid):
+        result = []
+        sql = "select comment from drupal_comments " + \
+            "where nid={0} order by timestamp".format(nid)
+        cursor = self.db.cursor()
+        cursor.execute(sql)
+        for item in cursor:
+            result.append(item[0])
+        cursor.close()
+        return result
 
     def __load_file(self):
         if not self.options.file:
