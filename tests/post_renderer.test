@@ -1,0 +1,39 @@
+# -*- coding:utf-8; tab-width:4; mode:python -*-
+
+import unittest
+import sys
+sys.path.append('$basedir/lib')
+from d2b import PostRenderer
+
+
+class TestPostRenderer(unittest.TestCase):
+    def setUp(self):
+        self.parser = PostRenderer()
+
+    def tearDown(self):
+        pass
+
+    def test_basic_style(self):
+        expected = '<p>hola</p>'
+        actuals = self.parser.render('hola')
+        self.assertEquals(expected, actuals)
+
+    def test_two_lines(self):
+        expected = '<p>hola</p><p>caracola</p>'
+        actuals = self.parser.render('hola\ncaracola')
+        self.assertEquals(expected, actuals)
+
+    def test_code_is_replaced(self):
+        expected = u'<p><div class="highlight" style="background: ' + \
+            '#f8f8f8"><pre style="line-height: 125%"><span style=' + \
+            '"color: #008000; font-weight: bold">print</span> <sp' + \
+            'an style="color: #BA2121">&quot;hello world&quot;</s' + \
+            'pan>\n</pre></div>\n</p>'
+        actuals = self.parser.render('[code]\nprint "hello world"\n[/code]')
+        self.assertEquals(expected, actuals)
+
+
+if __name__ == '__main__':
+    unittest.main()
+else:
+    UnitTestCase()

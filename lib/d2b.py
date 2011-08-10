@@ -25,6 +25,39 @@ from optparse import OptionGroup
 import MySQLdb
 import sys
 import os
+import re
+from pygments.lexers import guess_lexer
+from pygments.formatters import HtmlFormatter
+from pygments import highlight
+
+
+class PostRenderer(object):
+    _PATTERN = re.compile('(.*?)(\[code.*?\])(.*?)(\[/code\])',
+                          re.DOTALL | re.MULTILINE)
+
+    def __init__(self):
+        pass
+
+    def render(self, origin):
+        return '<p>' + self.__replace(origin) + '</p>'
+
+    def __replace(self, data):
+        result = ''
+        last = 0
+        for each in re.finditer(self._PATTERN, data):
+            print each.groups()
+            result += self.__replace_text(each.group(1))
+            result += self.__replace_code(each.group(3))
+            last = each.end()
+        result += self.__replace_text(data[last:])
+        return result
+
+    def __replace_text(self, data):
+        return data.replace('\n', '</p><p>')
+
+    def __replace_code(self, data):
+        return highlight(data, guess_lexer(data),
+                         HtmlFormatter(noclasses=True))
 
 
 class Blog(object):
