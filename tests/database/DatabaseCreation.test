@@ -29,32 +29,29 @@ USER = cp.get('db', 'user')
 PASS = cp.get('db', 'password')
 DDBB = cp.get('db', 'database')
 
-desc = 'Con la opción --no-blogger no envía los mensajes a blogger.'
-t = Test('{0} --no-blogger'.format(EXEC))
-t.desc = desc
-
-desc = 'Con la opción --no-blogger y --file/-f falla si el archivo no existe.'
-t = Test('{0} --no-blogger --file {1}'.format(EXEC, 'fichero.error'))
+desc = 'Con la opción --file/-f falla si el archivo no existe.'
+t = Test('{0} --file {1}'.format(EXEC, 'fichero.error'))
 t.desc = desc
 t.expected = 2
 t.post += StdErrContains('The file do not exists')
 
 desc = 'Con la opción -v/--verbose muestra información por la salida de error.'
-t = Test('{0} --no-blogger -v'.format(EXEC), save_stderr=True)
+t = Test('{0} -v'.format(EXEC), save_stderr=True)
 t.desc = desc
 t.post += StdErrContains('Verbose mode is ON.')
 
 desc = 'Se establecen los datos de conexión.'
-t = Test('{0} --no-blogger -u {1} -p {2} -d {3}'.format(
+t = Test('{0} -u {1} -p {2} -d {3}'.format(
         EXEC, USER, PASS, DDBB),
          expected=1)
 t.desc = desc
 
 desc = 'Se comprueba que se han obtenido los archivos.'
-t = Test('{0} --no-blogger -u {1} -p {2} -d {3} --save-to-file -f {4}'.format(
+t = Test('{0} -u {1} -p {2} -d {3} --save-to-file -f {4}'.format(
         EXEC, USER, PASS, DDBB, '$testdir/example001.sql'))
 t.gen += 'd2b_post_1.txt'
 t.gen += 'd2b_post_2.txt'
+t.gen += 'd2b_post_3.txt'
 t.desc = desc
 t.post += FileContains('Probando', '$testdir/../../d2b_post_1.txt')
 t.post += FileContains('Probando2', '$testdir/../../d2b_post_2.txt')
@@ -62,3 +59,5 @@ t.post += FileContains('Esto es un ejemplo de comentario',
                        '$testdir/../../d2b_post_1.txt')
 t.post += FileContains('Esto es otro ejemplo de comentario',
                        '$testdir/../../d2b_post_2.txt')
+t.post += FileContains('Ejemplo con código',
+                       '$testdir/../../d2b_post_3.txt')

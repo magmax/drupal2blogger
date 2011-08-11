@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS `drupal_node_revisions` (
 
 INSERT INTO `drupal_node_revisions` VALUES (1, 1, 1, 'Bienvenida', 'Probando...', 'Probando...', '', 1261126931, 2);
 INSERT INTO `drupal_node_revisions` VALUES (2, 2, 1, 'Bienvenida2', 'Probando2...', 'Probando2...', '', 1261126931, 2);
+INSERT INTO `drupal_node_revisions` VALUES (3, 3, 1, 'Con código', 'Ejemplo con código: \n[code language="python"]\nprint "hello, world"\n[/code] y fin', 'A', '', 1261126931, 2);
 
 CREATE TABLE IF NOT EXISTS `drupal_comments` (
   `cid` int(11) NOT NULL auto_increment,
@@ -41,3 +42,4 @@ CREATE TABLE IF NOT EXISTS `drupal_comments` (
 
 INSERT INTO `drupal_comments` VALUES (1, 0, 1, 0, 'Ejemplo 1 de comentario', 'Esto es un ejemplo de comentario.', '127.0.0.1', 1262969466, 0, 2, '01/', '', '', '');
 INSERT INTO `drupal_comments` VALUES (2, 0, 2, 1, 'Ejemplo 2 de comentario', 'Esto es otro ejemplo de comentario', '127.0.0.1', 1263028149, 0, 2, '02/', '', '', '');
+INSERT INTO `drupal_comments` VALUES (3, 0, 3, 1, 'Ejemplo 2 de comentario', 'Ejemplo con codigo: \n[code language="python"]\nprint "hello, comment"\n[/code] y fin', '127.0.0.1', 1263028149, 0, 2, '02/', '', '', '');
