@@ -1,27 +1,60 @@
 # -*- coding:utf-8; tab-width:4; mode:python -*-
 
-import unittest
+import unittest2
 import sys
 sys.path.append('$basedir/lib')
 from d2b import PostRenderer
+from d2b import Comment
+from d2b import Blog
 
 
-class TestPostRenderer(unittest.TestCase):
+class TestCommentsBasic(unittest2.TestCase):
+    def setUp(self):
+        self.sut = Comment()
+
+    def test_construction(self):
+        self.assertTrue(self.sut)
+
+
+class TestComments(unittest2.TestCase):
+    def setUp(self):
+        self.sut = Comment()
+        self.sut.body = "hola"
+        self.actuals = self.sut.get_atom('nobody').ToString()
+
+    def test_basic_content(self):
+        self.assertEquals("<p>hola</p>", self.sut.body)
+
+
+
+class TestBlogs(unittest2.TestCase):
+    def setUp(self):
+        self.sut = Blog()
+
+    def test_creation(self):
+        self.assertTrue(self.sut)
+
+    def test_has_a_title(self):
+        expected = "título"
+        self.sut.title = "título"
+        self.assertEquals(expected, self.sut.title)
+
+    def test_has_a_body(self):
+        expected = "<p>contenido</p>"
+        self.sut.body = "contenido"
+        self.assertEquals(expected, self.sut.body)
+
+
+
+class TestPostRenderer(unittest2.TestCase):
     def setUp(self):
         self.parser = PostRenderer()
-
-    def tearDown(self):
-        pass
 
     def test_basic_style(self):
         expected = '<p>hola</p>'
         actuals = self.parser.render('hola')
         self.assertEquals(expected, actuals)
 
-    def test_two_lines(self):
-        expected = '<p>hola</p><p>caracola</p>'
-        actuals = self.parser.render('hola\ncaracola')
-        self.assertEquals(expected, actuals)
 
     def test_code_is_replaced(self):
         expected = u'<p><div class="highlight" style="background: ' + \
@@ -32,8 +65,21 @@ class TestPostRenderer(unittest.TestCase):
         actuals = self.parser.render('[code]\nprint "hello world"\n[/code]')
         self.assertEquals(expected, actuals)
 
+    def test_another(self):
+        cadena = " edición áéíóú_ñÑ"
+        actuals = self.parser.render(cadena)
+        self.assertEquals('<p> edici\xc3\xb3n \xc3\xa1\xc3\xa9\xc3\xad\xc3\xb3\xc3\xba_\xc3\xb1\xc3\x91</p>', actuals)
+
+    def test_another_in_code_section(self):
+        cadena = "[code] edición áéíóú_ñÑ\r\n[/code]"
+        actuals = self.parser.render(cadena)
+        self.assertEquals('<p><div class="highlight" style="background: #f8f8f8"><pre style="line-height: 125%"> edici<span style="border: 1px solid #FF0000">\xc3\xb3</span>n <span style="border: 1px solid #FF0000">\xc3\xa1\xc3\xa9\xc3\xad\xc3\xb3\xc3\xba</span>_<span style="border: 1px solid #FF0000">\xc3\xb1\xc3\x91</span>\n</pre></div>\n</p>', actuals)
+
+    def test_another_mixed(self):
+        cadena = "Á [code]Á[/code] Á"
+        actuals = self.parser.render(cadena)
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest2.main()
 else:
     UnitTestCase()

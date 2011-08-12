@@ -27,4 +27,6 @@ data.append(cp.get('db', 'user'))
 data.append(cp.get('db', 'password'))
 data.append(cp.get('db', 'database'))
 
-Test('mysqladmin -u {0} -p{1} create {2}'.format(*data))
+Command('mysqladmin -u {0} -p{1} create {2}'.format(*data))
+Command('mysql -u {0} -p{1} {2} < $testdir/example001.sql'.format(*data),
+        shell=True)

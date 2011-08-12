@@ -20,15 +20,15 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-from optparse import OptionParser
-from optparse import OptionGroup
-
 import sys
 import os
 import re
-import codecs
+import time
+from datetime import datetime
 
+import argparse
 import MySQLdb
+import logging
 
 from pygments.lexers import guess_lexer
 from pygments.formatters import HtmlFormatter
@@ -48,8 +48,9 @@ class PostRenderer(object):
     def __init__(self):
         pass
 
-    def render(self, origin):
-        return '<p>' + self.__replace(origin) + '</p>'
+    def render(self, data):
+        return re.subn('<p>\s*</p>', '',
+                       '<p>' + self.__replace(data) + '</p>')[0]
 
     def __replace(self, data):
         result = ''
@@ -62,45 +63,37 @@ class PostRenderer(object):
         return result
 
     def __replace_text(self, data):
-        return data.replace('\r', '').replace('\n', '</p><p>')
+        result = data
+        result = re.subn('<!--\s*break\s*-->', '', result)[0]
+        result = re.subn('\\\\r', '', result)[0]
+        result = re.subn('\\\\n', '</p><p>', result)[0]
+        return result
 
     def __replace_code(self, data):
-        return highlight(data, guess_lexer(data),
-                         HtmlFormatter(noclasses=True))
+        result = data
+        result = re.subn('\\\\r', '', result)[0]
+        result = re.subn('\\\\n', '\n', result)[0]
+        return highlight(result, guess_lexer(result),
+                           HtmlFormatter(noclasses=True,
+                                         encoding='utf-8'))
 
 
-class Comment(object):
-    def __init__(self):
-        self._content = ''
-        self.renderer = PostRenderer()
+class BlogEntry(object):
+    _TERM = ''
+    _SCHEME = ''
 
-    def __get_content(self):
-        return self.renderer.render(self._content)
-
-    def __set_content(self, content):
-        self._content = content
-
-    def __str__(self):
-        return self.__get_content()
-
-    content = property(__get_content, __set_content)
-
-
-class Blog(object):
     def __init__(self):
         self.title = ''
         self._body = ''
         self.nid = 0
         self.comments = []
         self.renderer = PostRenderer()
+        self.published = datetime.now().isoformat()
+        self.updated = self.published
 
     def __str__(self):
         result = self.title + '\n\n'
-        result += self.body + '\n\n'
-        result += 'COMMENTS' + '\n\n'
-
-        for each in self.comments:
-            result += each.__str__() + '\n\n'
+        result += self.__get_body() + '\n\n'
         return result
 
     def __get_body(self):
@@ -109,15 +102,188 @@ class Blog(object):
     def __set_body(self, body):
         self._body = body
 
+    def get_atom(self, parent=None):
+        result = atom.Entry()
+        result.title = self.__get_atom_title()
+        result.content = self.__get_atom_content()
+        result.category = self.__get_atom_category()
+        result.published = self.__get_atom_published()
+        result.updated = self.__get_atom_updated()
+        result.extension_elements = self.__get_atom_extensions(parent)
+        return result
+
+    def __get_atom_title(self):
+        if not self.title:
+            return None
+        return atom.Title(text=self.title)
+
+    def __get_atom_content(self):
+        return atom.Content(text=self.__get_body(), content_type='html')
+
+    def __get_atom_category(self):
+        return atom.Category(term=self._TERM, scheme=self._SCHEME)
+
+    def __get_atom_published(self):
+        return atom.Published(text=self.published)
+
+    def __get_atom_updated(self):
+        return atom.Updated(text=self.updated)
+
+    def __get_atom_extensions(self, parent):
+        if not parent:
+            return None
+        extended = atom.ExtensionElement(
+            namespace='http://purl.org/syndication/thread/1.0',
+            tag='in-reply-to',
+            attributes={'href': parent})
+        return [extended]
+
     body = property(__get_body, __set_body)
+    atom = property(get_atom)
+
+
+class Comment(BlogEntry):
+    _TERM = 'http://schemas.google.com/blogger/2008/kind#comment'
+    _SCHEME = 'http://schemas.google.com/g/2005#kind'
+
+
+class Blog(BlogEntry):
+    _TERM = 'http://schemas.google.com/blogger/2008/kind#post'
+    _SCHEME = 'http://schemas.google.com/g/2005#kind'
+
+
+class BlogSource(object):
+    def __iter__(self):
+        return self
+
+
+class FileSource(BlogSource):
+    _RE_POST = re.compile(r"INSERT INTO `drupal_node_revisions`" + \
+                              r".*\((\d+), \d+, \d+, '(.*?)', '(.*?)', " + \
+                              r"'(.*?), '.*?', \d+, \d+\);")
+    def __init__(self, filename):
+        fd = open(filename)
+        data = fd.read()
+        fd.close()
+        self.matcher = re.finditer(self._RE_POST, data)
+
+    def next(self):
+        match = self.matcher.next()
+        if not match:
+            raise StopIteration
+
+        blog = Blog()
+        blog.nid = match.group(1)
+        blog.title = match.group(2)
+        blog.body = match.group(3)
+        return blog
+
+
+class DatabaseSource(BlogSource):
+    def __init__(self, user, password, database):
+        self.db = MySQLdb.connect(user=user,
+                                  passwd=password,
+                                  db=database,
+                                  charset="utf8",
+                                  use_unicode=True)
+
+        sql = "select nid,title,body,teaser,timestamp " + \
+            "from drupal_node_revisions order by nid"
+        self.cursor = self.db.cursor()
+        self.cursor.execute(sql)
+
+    def __del__(self):
+        self.cursor.close()
+
+    def next(self):
+        item = self.cursor.fetchone()
+        if not item:
+            raise StopIteration
+        blog = Blog()
+        blog.nid = item[0]
+        blog.title = item[1]
+        blog.body = item[2]
+        blog.comments = self.__get_comments(blog.nid)
+        return blog
+
+    def __get_comments(self, nid):
+        result = []
+        sql = "select comment,subject,timestamp from drupal_comments " + \
+            "where nid={0} order by timestamp".format(nid)
+        cursor = self.db.cursor()
+        cursor.execute(sql)
+        for item in cursor:
+            comment = Comment()
+            comment.body = item[0]
+            result.append(comment)
+        cursor.close()
+        return result
+
+
+class BlogSink(object):
+    def __init__(self):
+        pass
+
+    def store(self, blog):
+        raise NotImplemented("Not implemented yet")
+
+
+class FileSink(BlogSink):
+    def __init__(self, filepattern='d2b_post_{0:03}.txt'):
+        self.pattern = filepattern
+
+    def store(self, blog):
+        filename = self.pattern.format(int(blog.nid))
+        logging.getLogger().debug('Writing to file ' + filename)
+        logging.getLogger().debug('\tPost: ' + blog.title)
+        fd = open(filename, 'w+')
+        fd.write(blog.__str__())
+        fd.close()
+
+
+class BloggerSink(BlogSink):
+    def __init__(self, feedname=None):
+        logging.getLogger().debug('Using feed: ' + str(feedname))
+        self.client = gdata.blogger.client.BloggerClient()
+        gdata.sample_util.authorize_client(
+            self.client,
+            service='blogger',
+            source='Drupal2Blogger-0.0.0.1',
+            scopes=['http://www.blogger.com/feeds/'])
+        feeds = self.client.get_blogs()
+        self.blog_id = self.__select_feed_id(feedname, feeds)
+        self.previous_posts = self.__get_post_list()
+
+    def __get_post_list(self):
+        posts = self.client.get_posts(self.blog_id)
+        result = []
+        for each in posts.entry:
+            if each.title.text:
+                result.append(unicode(each.title.text))
+        return result
+
+    def __select_feed_id(self, name, feeds):
+        if not name:
+            return feeds[0].get_blog_id()
+        for each in feeds.entry:
+            if name == each.title.text:
+                return each.get_blog_id()
+        raise Exception('Selected feed does not exists.')
+
+    def store(self, blog):
+        if blog.title.decode('utf8') in self.previous_posts:
+            logging.getLogger().warn('SKIPING post:' + blog.title)
+            return
+        logging.getLogger().warn('Publishing post:' + blog.title)
+        self.client.add_post(self.blog_id, blog.title, blog.body)
 
 
 class D2B(object):
     def __init__(self, options):
         self.options = options
         self.db = None
-        self.bloggerclient = None
-        self.blog_id = None
+        self.atom = atom.Feed()
+        self.atom.entry = []
 
     def __del__(self):
         if self.db:
@@ -125,170 +291,89 @@ class D2B(object):
             self.db = None
 
     def run(self):
-        if self.options.verbose:
-            sys.stderr.write('Verbose mode is ON.\n')
+        logging.getLogger().debug('Verbose mode is ON.\n')
 
-        self.__connect_to_database()
-        self.__connect_to_blogger()
-        self.__load_file()
-        self.__get_blogs()
+        source = self.__select_source()
+        sink = self.__select_sink()
 
+        jump = 0
+        for each in source:
+            jump += 1
+            if jump < 124:
+                continue
+            sink.store(each)
         return 0
 
-    def __print(self, msg):
-        if not self.options.verbose:
-            return
-        print msg
+    def __select_source(self):
+        if self.options.parse_file:
+            logging.getLogger().info('Source file: ' +
+                                      self.options.parse_file)
+            return FileSource(self.options.parse_file)
+        logging.getLogger().info('Source database')
+        return DatabaseSource(self.options.user, self.options.password,
+                              self.options.database)
 
-    def __write_to_blogger(self, blog):
-        if not self.blog_id:
-            return
-        self.__print('Writing post: ' + blog.title)
-        try:
-            post_id = self.bloggerclient.add_post(self.blog_id,
-                                                  blog.title,
-                                                  blog.body, draft=False)
-            for each in blog.comments:
-                self.__print('Writing comment: ')
-                self.bloggerclient.add_comment(self.blog_id, post_id,
-                                               each.content)
-        except gdata.client.RequestError as e:
-            print e
+    def __select_sink(self):
+        if self.options.use_blogger:
+            logging.getLogger().info('Sink to Blogger')
+            return BloggerSink(self.options.blog_title)
+        logging.getLogger().info('Sink to file')
+        return FileSink()
 
-    def __write_to_hd(self, blog):
-        if not self.options.save_to_file:
-            return
 
-        fd = codecs.open("d2b_post_{0}.txt".format(blog.nid), 'w+', 'utf-8')
-        #fd = open("d2b_post_{0}.txt".format(blog.nid), 'w+')
-        fd.write(blog.__str__())
-        fd.close()
+def get_blog_name():
+    return time.strftime('drupalblog-%d-%M-%Y.xml')
 
-    def __get_blogs(self):
-        if not self.db:
-            return
 
-        sql = "select nid,title,body from drupal_node_revisions order by nid"
-        cursor = self.db.cursor()
-        cursor.execute(sql)
-        for item in cursor:
-            blog = Blog()
-            blog.nid = item[0]
-            blog.title = item[1]  # .decode('utf-8').encode('utf-8')
-            blog.body = item[2]
-            blog.comments = self.__get_comments(blog.nid)
-            self.__write_to_hd(blog)
-            self.__write_to_blogger(blog)
-        cursor.close()
-        self.db.commit()
-
-    def __get_comments(self, nid):
-        result = []
-        sql = "select comment from drupal_comments " + \
-            "where nid={0} order by timestamp".format(nid)
-        cursor = self.db.cursor()
-        cursor.execute(sql)
-        for item in cursor:
-            comment = Comment()
-            comment.content = item[0]  # .decode('utf-8').encode('utf-8')
-            result.append(comment)
-        cursor.close()
-        return result
-
-    def __load_file(self):
-        if not self.options.file:
-            return
-
-        self.__assert_file_exists()
-
-        for each in self.__read_file().split('\n\n'):
-            query = each.strip()
-            if query:
-                self.__execute_script(query)
-
-    def __execute_script(self, script):
-        cursor = self.db.cursor()
-        cursor.execute(script)
-        cursor.close()
-        self.db.commit()
-
-    def __read_file(self):
-        fd = open(self.options.file)
-        result = fd.read()
-        fd.close()
-        return result
-
-    def __assert_file_exists(self):
-        if not os.path.exists(self.options.file):
-            sys.stderr.write('The file do not exists.\n')
-            sys.exit(2)
-
-    def __connect_to_blogger(self):
-        if not self.options.send_to_blogger:
-            return
-        if not self.options.blog_name:
-            print 'Cannot send to bogger. Please, specify a Blog Name.'
-            return
-        self.bloggerclient = gdata.blogger.client.BloggerClient()
-        gdata.sample_util.authorize_client(
-            self.bloggerclient,
-            service='blogger',
-            source='Drupal2Blogger-0.0.0.1',
-            scopes=['http://www.blogger.com/feeds/'])
-        feed = self.bloggerclient.get_blogs()
-        for each in feed.entry:
-            if self.options.blog_name == each.title.text:
-                self.blog_id = each.get_blog_id()
-                break
-
-    def __connect_to_database(self):
-        if not self.options.user or \
-                not self.options.password or \
-                not self.options.database:
-            return
-
-        self.db = MySQLdb.connect(user=self.options.user,
-                                  passwd=self.options.password,
-                                  db=self.options.database,
-                                  charset="utf8")
+def configure_logger(verbose):
+    log = logging.getLogger()
+    ch = logging.StreamHandler()
+    if verbose:
+        log.level = logging.DEBUG
+        ch.level =  logging.DEBUG
+    else:
+        log.level = logging.INFO
+        ch.level = logging.INFO
+    log.addHandler(ch)
 
 
 def main():
-    parser = OptionParser()
-    parser.add_option('-v', '--verbose', action="store_true", default=False,
-                      dest='verbose',
-                      help='Shows more information.')
+    parser = argparse.ArgumentParser(
+        description='Exports posts from Drupal to Blogger')
+    parser.add_argument('-f', '--file', action="store", default=get_blog_name(),
+                        dest='filename',
+                        help='Changes the output filename by default: ' + \
+                            'drupalblog_<CURRENT_DATE>.xml.')
+    parser.add_argument('--parse-file', action="store",
+                        dest='parse_file',
+                        help='Parses a SQL file instead Database.')
+    parser.add_argument('-v', '--verbose', action="store_true", default=False,
+                        dest='verbose',
+                        help='Shows more information.')
+    parser.add_argument('-V', '--version', action='version', version='%(prog)s 2.0')
 
-    group = OptionGroup(parser, 'Database Options',
-                        'Options to use with Database.')
-    group.add_option('-f', "--file", action="store",
-                      dest='file',
-                      help='File to load database.')
-    group.add_option('-u', '--user', action='store',
-                    dest='user',
-                    help='User to connecto to DDBB.')
-    group.add_option('-p', '--password', action='store',
-                    dest='password',
-                    help='Password to connecto to DDBB.')
-    group.add_option('-d', '--database', action='store',
-                    dest='database',
-                    help='Database to connect to.')
-    group.add_option('--save-to-file', action='store_true', default=False,
-                    dest='save_to_file',
-                    help='Database to connect to.')
-    parser.add_option_group(group)
+    group = parser.add_argument_group('Database Options')
+    group.add_argument('-u', '--user', action='store',
+                       dest='user',
+                       help='User to connecto to DDBB.')
+    group.add_argument('-p', '--password', action='store',
+                       dest='password',
+                       help='Password to connecto to DDBB.')
+    group.add_argument('-d', '--database', action='store',
+                       dest='database',
+                       help='Database to connect to.')
 
-    group = OptionGroup(parser, 'Blogger Options',
-                        'Options to use with Blogger.')
-    group.add_option('--send-to-blogger', action='store_true', default=False,
-                    dest='send_to_blogger',
-                    help='Will send data to Blogger.')
-    group.add_option('--blog-name', action='store',
-                    dest='blog_name',
-                    help='Name of the blog to use.')
-    parser.add_option_group(group)
+    group = parser.add_argument_group('Blogger Options')
+    group.add_argument('-b', '--blogger', action='store_true', default=False,
+                       dest='use_blogger',
+                       help='Enables Blogger mode.')
+    group.add_argument('-t', '--feed-title', action='store',
+                       dest='blog_title',
+                       help='Selects the blog to save in or first one by default.')
 
-    (options, args) = parser.parse_args()
+    options = parser.parse_args()
+
+    configure_logger(options.verbose)
 
     d2b = D2B(options)
     sys.exit(d2b.run())
