@@ -20,11 +20,9 @@ class TestComments(unittest2.TestCase):
     def setUp(self):
         self.sut = Comment()
         self.sut.body = "hola"
-        self.actuals = self.sut.get_atom('nobody').ToString()
 
     def test_basic_content(self):
         self.assertEquals("<p>hola</p>", self.sut.body)
-
 
 
 class TestBlogs(unittest2.TestCase):
@@ -45,7 +43,6 @@ class TestBlogs(unittest2.TestCase):
         self.assertEquals(expected, self.sut.body)
 
 
-
 class TestPostRenderer(unittest2.TestCase):
     def setUp(self):
         self.parser = PostRenderer()
@@ -54,7 +51,6 @@ class TestPostRenderer(unittest2.TestCase):
         expected = '<p>hola</p>'
         actuals = self.parser.render('hola')
         self.assertEquals(expected, actuals)
-
 
     def test_code_is_replaced(self):
         expected = u'<p><div class="highlight" style="background: ' + \
@@ -68,12 +64,8 @@ class TestPostRenderer(unittest2.TestCase):
     def test_another(self):
         cadena = " edición áéíóú_ñÑ"
         actuals = self.parser.render(cadena)
-        self.assertEquals('<p> edici\xc3\xb3n \xc3\xa1\xc3\xa9\xc3\xad\xc3\xb3\xc3\xba_\xc3\xb1\xc3\x91</p>', actuals)
-
-    def test_another_in_code_section(self):
-        cadena = "[code] edición áéíóú_ñÑ\r\n[/code]"
-        actuals = self.parser.render(cadena)
-        self.assertEquals('<p><div class="highlight" style="background: #f8f8f8"><pre style="line-height: 125%"> edici<span style="border: 1px solid #FF0000">\xc3\xb3</span>n <span style="border: 1px solid #FF0000">\xc3\xa1\xc3\xa9\xc3\xad\xc3\xb3\xc3\xba</span>_<span style="border: 1px solid #FF0000">\xc3\xb1\xc3\x91</span>\n</pre></div>\n</p>', actuals)
+        self.assertEquals('<p> edici\xc3\xb3n \xc3\xa1\xc3\xa9\xc3\xad' + \
+                              '\xc3\xb3\xc3\xba_\xc3\xb1\xc3\x91</p>', actuals)
 
     def test_another_mixed(self):
         cadena = "Á [code]Á[/code] Á"

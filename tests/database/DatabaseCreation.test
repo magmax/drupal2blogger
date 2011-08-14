@@ -34,7 +34,6 @@ t = Test('{0} -v'.format(EXEC), save_stderr=True)
 t.desc = desc
 t.post += StdErrContains('Verbose mode is ON.')
 
-
 desc = 'Se genera el XML equivalente'
 filename = '$testdir/output.xml'
 t = Test('{0} -u {1} -p {2} -d {3} -f {4}'.format(

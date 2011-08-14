@@ -38,7 +38,6 @@ import gdata.blogger.client
 import gdata.client
 import gdata.sample_util
 import gdata.data
-import atom.data
 
 
 class PostRenderer(object):
@@ -79,8 +78,7 @@ class PostRenderer(object):
 
 
 class BlogEntry(object):
-    _TERM = ''
-    _SCHEME = ''
+    _TYPE = "Generic"
 
     def __init__(self):
         self.title = ''
@@ -102,54 +100,15 @@ class BlogEntry(object):
     def __set_body(self, body):
         self._body = body
 
-    def get_atom(self, parent=None):
-        result = atom.Entry()
-        result.title = self.__get_atom_title()
-        result.content = self.__get_atom_content()
-        result.category = self.__get_atom_category()
-        result.published = self.__get_atom_published()
-        result.updated = self.__get_atom_updated()
-        result.extension_elements = self.__get_atom_extensions(parent)
-        return result
-
-    def __get_atom_title(self):
-        if not self.title:
-            return None
-        return atom.Title(text=self.title)
-
-    def __get_atom_content(self):
-        return atom.Content(text=self.__get_body(), content_type='html')
-
-    def __get_atom_category(self):
-        return atom.Category(term=self._TERM, scheme=self._SCHEME)
-
-    def __get_atom_published(self):
-        return atom.Published(text=self.published)
-
-    def __get_atom_updated(self):
-        return atom.Updated(text=self.updated)
-
-    def __get_atom_extensions(self, parent):
-        if not parent:
-            return None
-        extended = atom.ExtensionElement(
-            namespace='http://purl.org/syndication/thread/1.0',
-            tag='in-reply-to',
-            attributes={'href': parent})
-        return [extended]
-
     body = property(__get_body, __set_body)
-    atom = property(get_atom)
 
 
 class Comment(BlogEntry):
-    _TERM = 'http://schemas.google.com/blogger/2008/kind#comment'
-    _SCHEME = 'http://schemas.google.com/g/2005#kind'
+    _TYPE = 'Comment'
 
 
 class Blog(BlogEntry):
-    _TERM = 'http://schemas.google.com/blogger/2008/kind#post'
-    _SCHEME = 'http://schemas.google.com/g/2005#kind'
+    _TYPE = 'Post'
 
 
 class BlogSource(object):
@@ -159,8 +118,9 @@ class BlogSource(object):
 
 class FileSource(BlogSource):
     _RE_POST = re.compile(r"INSERT INTO `drupal_node_revisions`" + \
-                              r".*\((\d+), \d+, \d+, '(.*?)', '(.*?)', " + \
+                              r".*\((\d+), \d+, \d+, '(.*?)', '(.*)', " + \
                               r"'(.*?), '.*?', \d+, \d+\);")
+
     def __init__(self, filename):
         fd = open(filename)
         data = fd.read()
@@ -239,6 +199,7 @@ class FileSink(BlogSink):
         fd = open(filename, 'w+')
         fd.write(blog.__str__())
         fd.close()
+        return True
 
 
 class BloggerSink(BlogSink):
@@ -259,7 +220,7 @@ class BloggerSink(BlogSink):
         result = []
         for each in posts.entry:
             if each.title.text:
-                result.append(unicode(each.title.text))
+                result.append(each.title.text)
         return result
 
     def __select_feed_id(self, name, feeds):
@@ -276,14 +237,13 @@ class BloggerSink(BlogSink):
             return
         logging.getLogger().warn('Publishing post:' + blog.title)
         self.client.add_post(self.blog_id, blog.title, blog.body)
+        return True
 
 
 class D2B(object):
     def __init__(self, options):
         self.options = options
         self.db = None
-        self.atom = atom.Feed()
-        self.atom.entry = []
 
     def __del__(self):
         if self.db:
@@ -296,12 +256,13 @@ class D2B(object):
         source = self.__select_source()
         sink = self.__select_sink()
 
-        jump = 0
+        n = 0
+        err = 0
         for each in source:
-            jump += 1
-            if jump < 124:
-                continue
-            sink.store(each)
+            n += 1
+            if not sink.store(each):
+                err += 1
+        logging.getLogger().info('{0} Posts; {1} erroneous'.format(n, err))
         return 0
 
     def __select_source(self):
@@ -330,7 +291,7 @@ def configure_logger(verbose):
     ch = logging.StreamHandler()
     if verbose:
         log.level = logging.DEBUG
-        ch.level =  logging.DEBUG
+        ch.level = logging.DEBUG
     else:
         log.level = logging.INFO
         ch.level = logging.INFO
@@ -340,36 +301,50 @@ def configure_logger(verbose):
 def main():
     parser = argparse.ArgumentParser(
         description='Exports posts from Drupal to Blogger')
-    parser.add_argument('-f', '--file', action="store", default=get_blog_name(),
+    parser.add_argument('-f', '--file',
+                        action="store",
+                        default=get_blog_name(),
                         dest='filename',
                         help='Changes the output filename by default: ' + \
                             'drupalblog_<CURRENT_DATE>.xml.')
-    parser.add_argument('--parse-file', action="store",
+    parser.add_argument('--parse-file',
+                        action="store",
                         dest='parse_file',
                         help='Parses a SQL file instead Database.')
-    parser.add_argument('-v', '--verbose', action="store_true", default=False,
+    parser.add_argument('-v', '--verbose',
+                        action="store_true",
+                        default=False,
                         dest='verbose',
                         help='Shows more information.')
-    parser.add_argument('-V', '--version', action='version', version='%(prog)s 2.0')
+    parser.add_argument('-V', '--version',
+                        action='version',
+                        version='%(prog)s 2.0')
 
     group = parser.add_argument_group('Database Options')
-    group.add_argument('-u', '--user', action='store',
+    group.add_argument('-u', '--user',
+                       action='store',
                        dest='user',
                        help='User to connecto to DDBB.')
-    group.add_argument('-p', '--password', action='store',
+    group.add_argument('-p', '--password',
+                       action='store',
                        dest='password',
                        help='Password to connecto to DDBB.')
-    group.add_argument('-d', '--database', action='store',
+    group.add_argument('-d', '--database',
+                       action='store',
                        dest='database',
                        help='Database to connect to.')
 
     group = parser.add_argument_group('Blogger Options')
-    group.add_argument('-b', '--blogger', action='store_true', default=False,
+    group.add_argument('-b', '--blogger',
+                       action='store_true',
+                       default=False,
                        dest='use_blogger',
                        help='Enables Blogger mode.')
-    group.add_argument('-t', '--feed-title', action='store',
+    group.add_argument('-t', '--feed-title',
+                       action='store',
                        dest='blog_title',
-                       help='Selects the blog to save in or first one by default.')
+                       help='Selects the blog to save in or first one by ' + \
+                           'default.')
 
     options = parser.parse_args()
 
